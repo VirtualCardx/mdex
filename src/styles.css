@@ -281,6 +281,8 @@ body {
 
 .md-body pre code {
   background: transparent;
+  border: 0;
+  border-radius: 0;
   padding: 0;
   color: #e6edf3;
   font-size: 13px;
