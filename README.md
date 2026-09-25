@@ -1,3 +1,5 @@
+English | [简体中文](README.zh-CN.md)
+
 # mdex
 
 A desktop markdown editor for the custom **`.mdex` document format** — a single
@@ -46,12 +48,18 @@ A `sample.mdex` lives in the repository root and showcases all features.
 - **Markdown niceties**: GFM tables and task lists, fenced code blocks with
   syntax highlighting (highlight.js), math via KaTeX, linkified URLs.
 - **Image workflows**: paste an image from the clipboard, drag & drop an image
-  file, or use the toolbar — all stored as archive assets.
+  file, or use the toolbar — all stored as archive assets. Plain `.md` files
+  keep their external images where they live: relative references (e.g.
+  `images/foo.png`) are loaded from the file's own directory and never
+  copied or moved.
 - **Format-aware saving**: a direct save (Ctrl+S) keeps the format of the
   file the document came from — `.mdex` archives re-save as archives,
   opened `.md` files write back as plain markdown (+ `assets/` folder for
   embedded images). Save As offers both formats with the current one
-  preselected, so it doubles as a converter between `.mdex` and `.md`.
+  preselected, so it doubles as a converter between `.mdex` and `.md`:
+  converting `.md` → `.mdex` pulls every referenced external image into the
+  archive and rewrites the links to its `assets/` entries, making the file
+  fully self-contained.
 - **Export**: plain `.md` (+ `assets/` folder) or a self-contained
   single-file HTML with inlined images.
 - **File associations (Windows)**: register mdex as the default app for
