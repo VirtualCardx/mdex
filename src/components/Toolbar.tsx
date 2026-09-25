@@ -13,6 +13,7 @@ export type ToolbarAction =
   | "exportMd"
   | "exportHtml"
   | "image"
+  | "fileAssoc"
   | "bold"
   | "italic"
   | "strike"
@@ -56,6 +57,7 @@ const IO_BUTTONS: ButtonSpec[] = [
   { id: "exportMd", label: "Export .md", title: "Export markdown + assets folder" },
   { id: "exportHtml", label: "Export .html", title: "Export self-contained HTML" },
   { id: "image", label: "Image", title: "Embed an image into the document" },
+  { id: "fileAssoc", label: "\u2699 Link files", title: "Register mdex as the default app for .md / .mdex files" },
 ];
 
 const FORMAT_BUTTONS: ButtonSpec[] = [

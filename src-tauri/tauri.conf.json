@@ -27,6 +27,15 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "fileAssociations": [
+      {
+        "ext": ["mdex", "md"],
+        "name": "Mdex Markdown Document",
+        "description": "mdex markdown document",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -42,6 +42,26 @@ export function exportHtml(path: string, html: string): Promise<void> {
   return invoke<void>("export_html", { path, html });
 }
 
+/** Consume a file path passed to the process at launch (OS association). */
+export function getStartupFile(): Promise<string | null> {
+  return invoke<string | null>("get_startup_file");
+}
+
+/** True when mdex is registered as an open handler for .md/.mdex. */
+export function fileAssociationsRegistered(): Promise<boolean> {
+  return invoke<boolean>("file_associations_registered");
+}
+
+/** Register mdex as the default "Open with" app for .md/.mdex (Windows). */
+export function registerFileAssociations(): Promise<void> {
+  return invoke<void>("register_file_associations");
+}
+
+/** Remove the file-association registration written above. */
+export function unregisterFileAssociations(): Promise<void> {
+  return invoke<void>("unregister_file_associations");
+}
+
 /** Ask the user to pick an existing .mdex or .md file. */
 export async function pickDocumentToOpen(): Promise<string | null> {
   const selection = await open({

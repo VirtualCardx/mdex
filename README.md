@@ -50,6 +50,8 @@ A `sample.mdex` lives in the repository root and showcases all features.
 - **Import / export**: open or import plain `.md`; export back to `.md`
   (+ `assets/` folder) or to a self-contained single-file HTML with inlined
   images.
+- **File associations (Windows)**: register mdex as the default app for
+  `.mdex` / `.md` from the toolbar — see the section below.
 - **Polish**: light/dark themes, unsaved-change confirmation on close,
   Ctrl+S / Ctrl+Shift+S / Ctrl+O / Ctrl+N shortcuts, status bar with word
   count and cursor position.
@@ -70,6 +72,63 @@ Useful extras:
 node scripts/make-icon.mjs   # regenerate src-tauri/app-icon.png
 pnpm tauri icon src-tauri/app-icon.png
 cargo test --manifest-path src-tauri/Cargo.toml   # format round-trip tests
+cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored
+                              # file-association registry round-trip (needs
+                              # real HKCU access; skipped by default)
+```
+
+## File associations (Windows)
+
+mdex can register itself as the default "Open with" application for `.mdex`
+and `.md` files. Click the **⚙ Link files** toolbar button to register (or,
+when already registered, to remove the registration). After registering,
+double-clicking a document opens it in mdex; if mdex is already running, the
+file is routed to the existing window instead of launching a second instance
+(`tauri-plugin-single-instance`), with unsaved-change confirmation applied.
+
+### What is written to the registry
+
+Everything lives under `HKEY_CURRENT_USER\Software\Classes` — **no
+administrator rights are required** and the registration is fully reversible
+(the same button removes it):
+
+```text
+HKCU\Software\Classes
+├── Mdex.Editor                          # ProgID
+│   (Default)          = "Mdex Markdown Document"
+│   DefaultIcon
+│     (Default)        = "<path-to-mdex.exe>",0
+│   shell\open\command
+│     (Default)        = "<path-to-mdex.exe>" "%1"
+├── .mdex
+│   (Default)          = Mdex.Editor            # claimed as default
+│   OpenWithProgids
+│     Mdex.Editor      = ""
+└── .md
+    OpenWithProgids
+      Mdex.Editor      = ""
+```
+
+- The extension default is only written when no other application owns it
+  (or it is already ours). Windows 10/11 protects existing per-user defaults
+  with a `UserChoice` hash, so for an extension already claimed by another
+  app mdex still appears in the "Open with" list and you can confirm it as
+  the default from there (or via Settings → Default apps).
+- Explorer is notified via `SHChangeNotify(SHCNE_ASSOCCHANGED)` so icons and
+  context menus refresh immediately.
+- The NSIS installer produced by `pnpm tauri build` registers the same
+  associations declaratively through `bundle.fileAssociations` in
+  `tauri.conf.json` (and removes them on uninstall).
+- Registration records the path of the running executable — when developing
+  with `pnpm tauri dev` this is the debug binary, so re-register after
+  installing a release build.
+
+Leftover entries can be removed by hand if needed:
+
+```text
+reg delete "HKCU\Software\Classes\Mdex.Editor" /f
+reg delete "HKCU\Software\Classes\.mdex\OpenWithProgids\Mdex.Editor" /f
+reg delete "HKCU\Software\Classes\.md\OpenWithProgids\Mdex.Editor" /f
 ```
 
 ## Architecture
@@ -84,6 +143,7 @@ src/                    React frontend
 src-tauri/
   src/mdex.rs           mdex format core: read/write ZIP archives, metadata
   src/commands.rs       Tauri commands + mdexasset:// protocol handler
+  src/fileassoc.rs      Windows file-association registry (HKCU, reversible)
   src/lib.rs            app builder, plugins, state, command registry
 ```
 
@@ -93,7 +153,7 @@ assets, metadata) lives in managed state; save writes the archive atomically
 
 ## Roadmap ideas
 
-- File association for double-click `.mdex` open, recent files menu
+- Recent files menu
 - Multiple documents in tabs
 - Asset manager panel (rename/replace/delete unused assets)
 - Document outline / table of contents sidebar

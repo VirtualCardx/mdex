@@ -134,6 +134,49 @@ pub fn export_html(path: String, html: String) -> Result<(), String> {
     fs::write(&target, html).map_err(|e| e.to_string())
 }
 
+/// Consume the file path passed to the process at launch (OS file
+/// association double-click). Returns `None` after the first call.
+#[tauri::command]
+pub fn get_startup_file(state: State<mdex::PendingOpen>) -> Option<String> {
+    state.0.lock().unwrap().take()
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn file_associations_registered() -> bool {
+    crate::fileassoc::is_registered()
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn file_associations_registered() -> bool {
+    false
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn register_file_associations() -> Result<(), String> {
+    crate::fileassoc::register()
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn register_file_associations() -> Result<(), String> {
+    Err(String::from("file associations are only supported on Windows"))
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn unregister_file_associations() -> Result<(), String> {
+    crate::fileassoc::unregister()
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn unregister_file_associations() -> Result<(), String> {
+    Err(String::from("file associations are only supported on Windows"))
+}
+
 /// `mdexasset://<key>` protocol: serves asset bytes from the loaded archive.
 /// Keys are only looked up in the in-memory map, so path traversal is
 /// impossible by construction.

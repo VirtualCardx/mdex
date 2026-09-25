@@ -8,6 +8,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -20,13 +21,17 @@ import {
   addAssetBytes,
   exportHtml,
   exportMarkdown,
+  fileAssociationsRegistered,
+  getStartupFile,
   importMarkdown,
   newDocument,
   openMdex,
   pickDocumentToOpen,
   pickImageToAdd,
   pickSaveTarget,
+  registerFileAssociations,
   saveMdex,
+  unregisterFileAssociations,
 } from "./lib/api";
 import { assetUrl, renderMarkdown } from "./lib/markdown";
 import { insertImageRef, runFormatAction } from "./lib/actions";
@@ -259,6 +264,29 @@ export default function App() {
     }
   }, [doc, fileName, flash]);
 
+  /** Register/unregister mdex as the default .md/.mdex handler. */
+  const handleFileAssoc = useCallback(async () => {
+    try {
+      const registered = await fileAssociationsRegistered();
+      const confirm = await ask(
+        registered
+          ? "mdex is currently registered for .mdex / .md files.\n\nRemove the registration?"
+          : "Register mdex as the default app for .mdex and .md files?\n\nWindows may ask you to confirm in Settings when another app already owns .md.",
+        {
+          title: "File association",
+          kind: registered ? "warning" : "info",
+          okLabel: registered ? "Remove" : "Register",
+          cancelLabel: "Cancel",
+        },
+      );
+      if (!confirm) return;
+      await (registered ? unregisterFileAssociations() : registerFileAssociations());
+      flash(registered ? "File association removed" : "Registered for .mdex / .md");
+    } catch (error) {
+      flash(`File association failed: ${String(error)}`);
+    }
+  }, [flash]);
+
   // Stable handler registry for once-registered listeners.
   const handlers = useRef({
     newDoc: handleNew,
@@ -353,6 +381,28 @@ export default function App() {
       .catch(() => undefined);
   }, [dirty, fileName]);
 
+  // Open the file passed to the process at launch (OS association).
+  useEffect(() => {
+    void (async () => {
+      const path = await getStartupFile();
+      if (path) await openPath(path);
+    })();
+  }, [openPath]);
+
+  // A second instance was launched with a file (single-instance plugin).
+  useEffect(() => {
+    const promise = listen<string>("mdex:open-file", (event) => {
+      const path = event.payload;
+      void (async () => {
+        if ((await ensureSaved()) === "cancel") return;
+        await openPath(path);
+      })();
+    });
+    return () => {
+      void promise.then((unlisten) => unlisten());
+    };
+  }, [ensureSaved, openPath]);
+
   // Render pipeline: defer heavy markdown rendering while typing.
   const deferred = useDeferredValue(markdown);
   const html = useMemo(() => renderMarkdown(deferred), [deferred]);
@@ -389,13 +439,16 @@ export default function App() {
         case "image":
           void handleInsertImage();
           return;
+        case "fileAssoc":
+          void handleFileAssoc();
+          return;
         default:
           if (viewRef.current) runFormatAction(viewRef.current, id);
           return;
       }
     },
-    [doSave, handleExportHtml, handleExportMd, handleImport, handleInsertImage,
-      handleNew, handleOpenDialog],
+    [doSave, handleExportHtml, handleExportMd, handleFileAssoc, handleImport,
+      handleInsertImage, handleNew, handleOpenDialog],
   );
 
   // Divider drag: adjust editor pane width.

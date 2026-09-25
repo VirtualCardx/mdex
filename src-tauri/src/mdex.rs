@@ -87,6 +87,12 @@ impl AppState {
     }
 }
 
+/// A file path handed to the process on the command line (double-clicking a
+/// `.mdex`/`.md` file via the OS association). Consumed by the frontend on
+/// startup via `get_startup_file`.
+#[derive(Default)]
+pub struct PendingOpen(pub Mutex<Option<String>>);
+
 pub fn now_rfc3339() -> String {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
