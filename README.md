@@ -47,14 +47,19 @@ A `sample.mdex` lives in the repository root and showcases all features.
   syntax highlighting (highlight.js), math via KaTeX, linkified URLs.
 - **Image workflows**: paste an image from the clipboard, drag & drop an image
   file, or use the toolbar — all stored as archive assets.
-- **Import / export**: open or import plain `.md`; export back to `.md`
-  (+ `assets/` folder) or to a self-contained single-file HTML with inlined
-  images.
+- **Format-aware saving**: a direct save (Ctrl+S) keeps the format of the
+  file the document came from — `.mdex` archives re-save as archives,
+  opened `.md` files write back as plain markdown (+ `assets/` folder for
+  embedded images). Save As offers both formats with the current one
+  preselected, so it doubles as a converter between `.mdex` and `.md`.
+- **Export**: plain `.md` (+ `assets/` folder) or a self-contained
+  single-file HTML with inlined images.
 - **File associations (Windows)**: register mdex as the default app for
   `.mdex` / `.md` from the toolbar — see the section below.
-- **Polish**: light/dark themes, unsaved-change confirmation on close,
-  Ctrl+S / Ctrl+Shift+S / Ctrl+O / Ctrl+N shortcuts, status bar with word
-  count and cursor position.
+- **Polish**: light/dark themes (the choice is remembered across launches
+  and follows the OS preference until changed), unsaved-change confirmation
+  on close, Ctrl+S / Ctrl+Shift+S / Ctrl+O / Ctrl+N shortcuts, status bar
+  with word count and cursor position.
 
 ## Getting started
 
@@ -140,6 +145,7 @@ src/                    React frontend
   lib/markdown.ts       markdown-it pipeline; rewrites assets/* to mdexasset://
   lib/actions.ts        toolbar text transformations on the editor view
   lib/api.ts            typed wrappers around Tauri commands and dialogs
+  lib/settings.ts       persisted UI preferences (theme) via localStorage
 src-tauri/
   src/mdex.rs           mdex format core: read/write ZIP archives, metadata
   src/commands.rs       Tauri commands + mdexasset:// protocol handler

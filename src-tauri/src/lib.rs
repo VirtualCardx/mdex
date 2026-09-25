@@ -34,7 +34,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::new_document,
             commands::open_mdex,
-            commands::save_mdex,
+            commands::save_document,
             commands::import_markdown,
             commands::add_asset,
             commands::add_asset_bytes,

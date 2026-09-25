@@ -27,8 +27,12 @@ pub fn open_mdex(path: String, state: State<AppState>) -> Result<DocumentPayload
     Ok(payload)
 }
 
+/// Save the document to `path`. The format follows the target extension:
+/// `.mdex` writes an archive, `.md` writes plain markdown (plus an `assets/`
+/// folder when the document has embedded assets). With `path: None`, the
+/// document re-saves to its current location in its current format.
 #[tauri::command]
-pub fn save_mdex(
+pub fn save_document(
     path: Option<String>,
     markdown: String,
     state: State<AppState>,
@@ -43,17 +47,53 @@ pub fn save_mdex(
         None => doc.path.clone().ok_or("no path: use Save As")?,
     };
 
-    mdex::write_to(&target, doc).map_err(|e| e.to_string())?;
+    let is_plain_md = target
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("md"))
+        .unwrap_or(false);
+    if is_plain_md {
+        write_plain(&target, &doc.markdown, &doc.assets)?;
+    } else {
+        mdex::write_to(&target, doc).map_err(|e| e.to_string())?;
+    }
     doc.path = Some(target);
     Ok(mdex::payload_of(doc))
 }
 
-/// Import a plain `.md` file as a new untitled mdex document.
+/// Write a plain `.md` file; embedded assets go to an `assets/` folder next
+/// to it so relative references (`![x](assets/y.png)`) keep working.
+fn write_plain(
+    target: &std::path::Path,
+    markdown: &str,
+    assets: &std::collections::HashMap<String, Vec<u8>>,
+) -> Result<(), String> {
+    if let Some(parent) = target.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+    fs::write(target, markdown).map_err(|e| e.to_string())?;
+    if !assets.is_empty() {
+        if let Some(parent) = target.parent() {
+            let assets_dir = parent.join("assets");
+            fs::create_dir_all(&assets_dir).map_err(|e| e.to_string())?;
+            for (key, bytes) in assets {
+                let name = key.strip_prefix("assets/").unwrap_or(key);
+                fs::write(assets_dir.join(name), bytes).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Import a plain `.md` file. The source path is kept on the document so a
+/// direct save writes the file back in place (still as `.md`).
 #[tauri::command]
 pub fn import_markdown(path: String, state: State<AppState>) -> Result<DocumentPayload, String> {
     let markdown = fs::read_to_string(&path).map_err(|e| format!("cannot read {path}: {e}"))?;
     let title = mdex::title_from_markdown(&markdown);
-    let doc = mdex::new_document(markdown, title);
+    let mut doc = mdex::new_document(markdown, title);
+    doc.path = Some(PathBuf::from(&path));
     let payload = mdex::payload_of(&doc);
     *state.0.lock().unwrap() = Some(doc);
     Ok(payload)
@@ -96,30 +136,13 @@ pub fn add_asset_bytes(
     Ok(key)
 }
 
-/// Export the current document as a plain `.md` file; assets are written to an
-/// `assets/` folder next to it so relative references keep working.
+/// Export the current document as a plain `.md` file; assets are written to
+/// an `assets/` folder next to it so relative references keep working.
 #[tauri::command]
 pub fn export_markdown(path: String, markdown: String, state: State<AppState>) -> Result<(), String> {
     let guard = state.0.lock().unwrap();
     let doc = guard.as_ref().ok_or("no document is open")?;
-    let target = PathBuf::from(&path);
-    if let Some(parent) = target.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-    }
-    fs::write(&target, markdown).map_err(|e| e.to_string())?;
-    if !doc.assets.is_empty() {
-        if let Some(parent) = target.parent() {
-            let assets_dir = parent.join("assets");
-            fs::create_dir_all(&assets_dir).map_err(|e| e.to_string())?;
-            for (key, bytes) in &doc.assets {
-                let name = key.strip_prefix("assets/").unwrap_or(key);
-                fs::write(assets_dir.join(name), bytes).map_err(|e| e.to_string())?;
-            }
-        }
-    }
-    Ok(())
+    write_plain(&PathBuf::from(&path), &markdown, &doc.assets)
 }
 
 /// Save a fully-rendered, self-contained HTML page produced by the frontend.
@@ -218,4 +241,33 @@ pub fn handle_asset_scheme(
         .header("Access-Control-Allow-Origin", "*")
         .body(bytes.clone())
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_plain_outputs_document_and_assets() {
+        // Use src-tauri/target (gitignored) so the test works under sandboxes
+        // that restrict writes to the workspace.
+        let base = std::env::current_dir()
+            .expect("cwd")
+            .join("target")
+            .join("write-plain-test");
+        let _ = fs::remove_dir_all(&base);
+        let target = base.join("out").join("doc.md");
+
+        let mut assets = std::collections::HashMap::new();
+        assets.insert(String::from("assets/logo.png"), vec![1u8, 2, 3]);
+
+        write_plain(&target, "# hi", &assets).expect("write_plain should succeed");
+
+        assert_eq!(fs::read_to_string(&target).unwrap(), "# hi");
+        assert_eq!(
+            fs::read(base.join("out").join("assets").join("logo.png")).unwrap(),
+            vec![1u8, 2, 3]
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
 }

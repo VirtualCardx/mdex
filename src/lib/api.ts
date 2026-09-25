@@ -12,11 +12,15 @@ export function openMdex(path: string): Promise<DocumentPayload> {
   return invoke<DocumentPayload>("open_mdex", { path });
 }
 
-export function saveMdex(
+/**
+ * Save the document. The format follows the target extension: `.mdex`
+ * writes an archive, `.md` writes plain markdown + `assets/` folder.
+ */
+export function saveDocument(
   path: string | null,
   markdown: string,
 ): Promise<DocumentPayload> {
-  return invoke<DocumentPayload>("save_mdex", { path, markdown });
+  return invoke<DocumentPayload>("save_document", { path, markdown });
 }
 
 export function importMarkdown(path: string): Promise<DocumentPayload> {
@@ -92,16 +96,24 @@ export async function pickImageToAdd(): Promise<string | null> {
   return typeof selection === "string" ? selection : null;
 }
 
+/** Ask the user where to save, offering several format filters. */
+export async function pickSaveTargetAs(
+  filters: { name: string; extensions: string[] }[],
+  defaultName: string,
+): Promise<string | null> {
+  const target = await save({
+    title: "Save as",
+    filters,
+    defaultPath: defaultName,
+  });
+  return typeof target === "string" ? target : null;
+}
+
 /** Ask the user where to save a file. */
 export async function pickSaveTarget(
   extensions: string[],
   filterName: string,
   defaultName: string,
 ): Promise<string | null> {
-  const target = await save({
-    title: "Save as",
-    filters: [{ name: filterName, extensions }],
-    defaultPath: defaultName,
-  });
-  return typeof target === "string" ? target : null;
+  return pickSaveTargetAs([{ name: filterName, extensions }], defaultName);
 }

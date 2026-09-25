@@ -29,12 +29,14 @@ import {
   pickDocumentToOpen,
   pickImageToAdd,
   pickSaveTarget,
+  pickSaveTargetAs,
   registerFileAssociations,
-  saveMdex,
+  saveDocument,
   unregisterFileAssociations,
 } from "./lib/api";
 import { assetUrl, renderMarkdown } from "./lib/markdown";
 import { insertImageRef, runFormatAction } from "./lib/actions";
+import { loadTheme, saveTheme } from "./lib/settings";
 import type { CursorInfo, DocumentPayload, Theme, ViewMode } from "./lib/types";
 
 type SaveChoice = "saved" | "discard" | "cancel";
@@ -60,7 +62,7 @@ export default function App() {
   const [markdown, setMarkdown] = useState("");
   const [dirty, setDirty] = useState(false);
   const [docId, setDocId] = useState("initial");
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>(loadTheme);
   const [mode, setMode] = useState<ViewMode>("split");
   const [cursor, setCursor] = useState<CursorInfo>({ ln: 1, col: 1 });
   const [message, setMessage] = useState("");
@@ -101,21 +103,36 @@ export default function App() {
     setDocId(`doc-${payload.path ?? "untitled"}-${Date.now()}`);
   }, []);
 
-  /** Save the document; `as` forces the save-as dialog. Returns true on success. */
+  /** Save the document; `as` forces the save-as dialog. Returns true on success.
+   *
+   * A direct save keeps the format of the file the document came from
+   * (`.mdex` archive or plain `.md`); Save As offers both formats, with the
+   * current one preselected. */
   const doSave = useCallback(
     async (saveAs = false): Promise<boolean> => {
       try {
         const currentPath = doc?.path ?? null;
         let target: string | null = currentPath;
         if (saveAs || !target) {
-          target = await pickSaveTarget(
-            ["mdex"],
-            "mdex documents",
-            fileName.endsWith(".mdex") ? fileName : `${fileName.replace(/\.mdex?$/, "")}.mdex`,
-          );
+          const isPlainMd = /\.md$/i.test(currentPath ?? "");
+          const defaultName = currentPath
+            ? fileName
+            : fileName.endsWith(".mdex")
+              ? fileName
+              : `${fileName.replace(/\.mdex?$/, "")}.mdex`;
+          const filters = isPlainMd
+            ? [
+                { name: "Markdown", extensions: ["md"] },
+                { name: "mdex documents", extensions: ["mdex"] },
+              ]
+            : [
+                { name: "mdex documents", extensions: ["mdex"] },
+                { name: "Markdown", extensions: ["md"] },
+              ];
+          target = await pickSaveTargetAs(filters, defaultName);
           if (!target) return false;
         }
-        const payload = await saveMdex(target, latest.current.markdown);
+        const payload = await saveDocument(target, latest.current.markdown);
         applyPayload(payload);
         flash(`Saved ${payload.fileName}`);
         return true;
@@ -380,6 +397,11 @@ export default function App() {
       .setTitle(`${dirty ? "\u25CF " : ""}${fileName} \u2014 mdex`)
       .catch(() => undefined);
   }, [dirty, fileName]);
+
+  // Persist the theme choice so the next launch starts in the same mode.
+  useEffect(() => {
+    saveTheme(theme);
+  }, [theme]);
 
   // Open the file passed to the process at launch (OS association).
   useEffect(() => {
