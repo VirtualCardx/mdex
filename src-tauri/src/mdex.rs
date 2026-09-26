@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -207,34 +207,14 @@ pub fn open(path: PathBuf) -> Result<LoadedDocument, MdexError> {
 
 /// Write the document to an `.mdex` archive atomically (tmp file + rename).
 pub fn write_to(path: &Path, doc: &LoadedDocument) -> Result<(), MdexError> {
+    let bytes = archive_bytes(doc)?;
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)?;
         }
     }
     let tmp = path.with_extension("mdex.tmp");
-
-    {
-        let file = fs::File::create(&tmp)?;
-        let mut writer = ZipWriter::new(file);
-        let options = SimpleFileOptions::default()
-            .compression_method(CompressionMethod::Deflated);
-
-        writer.start_file(META_ENTRY, options)?;
-        writer.write_all(serde_json::to_string_pretty(&doc.meta)?.as_bytes())?;
-
-        writer.start_file(DOC_ENTRY, options)?;
-        writer.write_all(doc.markdown.as_bytes())?;
-
-        let mut keys: Vec<&String> = doc.assets.keys().collect();
-        keys.sort();
-        for key in keys {
-            writer.start_file(key.as_str(), options)?;
-            writer.write_all(&doc.assets[key])?;
-        }
-
-        writer.finish()?;
-    }
+    fs::write(&tmp, bytes)?;
 
     // Windows `rename` fails when the destination exists; remove first.
     if path.exists() {
@@ -242,6 +222,37 @@ pub fn write_to(path: &Path, doc: &LoadedDocument) -> Result<(), MdexError> {
     }
     fs::rename(&tmp, path)?;
     Ok(())
+}
+
+/// Serialize a document to in-memory `.mdex` archive bytes.
+fn archive_bytes(doc: &LoadedDocument) -> Result<Vec<u8>, MdexError> {
+    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated);
+
+    writer.start_file(META_ENTRY, options)?;
+    writer.write_all(serde_json::to_string_pretty(&doc.meta)?.as_bytes())?;
+
+    writer.start_file(DOC_ENTRY, options)?;
+    writer.write_all(doc.markdown.as_bytes())?;
+
+    let mut keys: Vec<&String> = doc.assets.keys().collect();
+    keys.sort();
+    for key in keys {
+        writer.start_file(key.as_str(), options)?;
+        writer.write_all(&doc.assets[key])?;
+    }
+
+    let buf = writer.finish()?;
+    Ok(buf.into_inner())
+}
+
+/// Minimal self-contained `.mdex` used as the template for the Windows
+/// Explorer "New" context-menu entry (an empty file would not be a valid
+/// archive). Returns the raw archive bytes.
+pub fn template_bytes() -> Vec<u8> {
+    let doc = new_document("# Untitled\n", None);
+    archive_bytes(&doc).expect("in-memory template serialization cannot fail")
 }
 
 /// Sanitize a display file name into a safe asset base name.
@@ -351,6 +362,19 @@ mod tests {
         assert_eq!(loaded.meta.version, FORMAT_VERSION);
         assert_eq!(loaded.meta.title.as_deref(), Some("Title"));
         assert_eq!(loaded.path.as_deref(), Some(path.as_path()));
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn template_bytes_is_a_valid_archive() {
+        let path = temp_path("template");
+        fs::write(&path, template_bytes()).expect("write template");
+
+        let doc = open(path.clone()).expect("template should open as a valid archive");
+        assert_eq!(doc.markdown, "# Untitled\n");
+        assert!(doc.assets.is_empty());
+        assert_eq!(doc.meta.format, FORMAT_NAME);
 
         let _ = fs::remove_file(&path);
     }

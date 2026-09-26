@@ -85,11 +85,11 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored
 
 ## 文件关联（Windows）
 
-mdex 可以把自己注册为 `.mdex` 与 `.md` 文件的默认"打开方式"。点击工具栏
-的 **⚙ Link files** 按钮即可注册（已注册时再次点击则移除注册）。注册后，
-双击文档会在 mdex 中打开；若 mdex 已在运行，文件会路由到现有窗口而不是
-启动第二个实例（`tauri-plugin-single-instance`），同样会先确认未保存的
-更改。
+mdex 可以把自己注册为 `.mdex` 与 `.md` 文件的默认"打开方式"，并把两种类
+型加入资源管理器的**新建**右键菜单。点击工具栏的 **⚙ Link files** 按钮
+即可注册（已注册时再次点击则移除注册）。注册后，双击文档会在 mdex 中打
+开；若 mdex 已在运行，文件会路由到现有窗口而不是启动第二个实例
+（`tauri-plugin-single-instance`），同样会先确认未保存的更改。
 
 ### 注册表写入内容
 
@@ -98,8 +98,14 @@ mdex 可以把自己注册为 `.mdex` 与 `.md` 文件的默认"打开方式"。
 
 ```text
 HKCU\Software\Classes
-├── Mdex.Editor                          # ProgID
-│   (Default)          = "Mdex Markdown Document"
+├── Mdex.Editor                          # .mdex 的 ProgID
+│   (Default)          = "Mdex Archive Document"
+│   DefaultIcon
+│     (Default)        = "<path-to-mdex.exe>",0
+│   shell\open\command
+│     (Default)        = "<path-to-mdex.exe>" "%1"
+├── Mdex.Markdown                        # .md 的 ProgID
+│   (Default)          = "Markdown Document"
 │   DefaultIcon
 │     (Default)        = "<path-to-mdex.exe>",0
 │   shell\open\command
@@ -108,15 +114,26 @@ HKCU\Software\Classes
 │   (Default)          = Mdex.Editor            # 认领为默认
 │   OpenWithProgids
 │     Mdex.Editor      = ""
+│   ShellNew
+│     Data             = <最小 .mdex 模板，合法 ZIP 归档>
 └── .md
+    (Default)          = Mdex.Markdown          # 仅在未被占用时
     OpenWithProgids
-      Mdex.Editor      = ""
+      Mdex.Markdown     = ""
+    ShellNew
+      NullFile         = ""                     # 新建空 .md 文件
 ```
 
 - 只有当扩展名的默认值未被其他应用占用（或已经是本应用）时才会写入扩展
   名默认值。Windows 10/11 用 `UserChoice` 哈希保护既有的每用户默认值，
   因此对于已被其他应用认领的扩展名，mdex 仍会出现在"打开方式"列表中，
   你可以在那里（或通过 设置 → 默认应用）确认它为默认。
+- `ShellNew` 键把两种文件类型加入资源管理器的**新建**右键菜单，呈现为两个
+  可区分的条目——"Mdex Archive Document"（`.mdex`）与 "Markdown
+  Document"（`.md`），每个扩展名一个专属 ProgID。新建的 `.mdex` 文件由内
+  嵌的最小模板（`meta.json` + `document.md`）写入，打开即是合法归档；新
+  建的 `.md` 文件为空。若 `.md` 已被其他应用关联，则显示该应用的名称，mdex
+  不会抢占。
 - 注册后通过 `SHChangeNotify(SHCNE_ASSOCCHANGED)` 通知资源管理器，图标与
   右键菜单立即刷新。
 - `pnpm tauri build` 产出的 NSIS 安装包通过 `tauri.conf.json` 的

@@ -93,10 +93,11 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored
 ## File associations (Windows)
 
 mdex can register itself as the default "Open with" application for `.mdex`
-and `.md` files. Click the **⚙ Link files** toolbar button to register (or,
-when already registered, to remove the registration). After registering,
-double-clicking a document opens it in mdex; if mdex is already running, the
-file is routed to the existing window instead of launching a second instance
+and `.md` files, and add both to Explorer's **New** context menu. Click the
+**⚙ Link files** toolbar button to register (or, when already registered, to
+remove the registration). After registering, double-clicking a document
+opens it in mdex; if mdex is already running, the file is routed to the
+existing window instead of launching a second instance
 (`tauri-plugin-single-instance`), with unsaved-change confirmation applied.
 
 ### What is written to the registry
@@ -107,8 +108,14 @@ administrator rights are required** and the registration is fully reversible
 
 ```text
 HKCU\Software\Classes
-├── Mdex.Editor                          # ProgID
-│   (Default)          = "Mdex Markdown Document"
+├── Mdex.Editor                          # ProgID for .mdex
+│   (Default)          = "Mdex Archive Document"
+│   DefaultIcon
+│     (Default)        = "<path-to-mdex.exe>",0
+│   shell\open\command
+│     (Default)        = "<path-to-mdex.exe>" "%1"
+├── Mdex.Markdown                        # ProgID for .md
+│   (Default)          = "Markdown Document"
 │   DefaultIcon
 │     (Default)        = "<path-to-mdex.exe>",0
 │   shell\open\command
@@ -117,9 +124,14 @@ HKCU\Software\Classes
 │   (Default)          = Mdex.Editor            # claimed as default
 │   OpenWithProgids
 │     Mdex.Editor      = ""
+│   ShellNew
+│     Data             = <minimal .mdex template, a valid ZIP archive>
 └── .md
+    (Default)          = Mdex.Markdown          # only when unclaimed
     OpenWithProgids
-      Mdex.Editor      = ""
+      Mdex.Markdown     = ""
+    ShellNew
+      NullFile         = ""                     # empty new .md file
 ```
 
 - The extension default is only written when no other application owns it
@@ -127,6 +139,13 @@ HKCU\Software\Classes
   with a `UserChoice` hash, so for an extension already claimed by another
   app mdex still appears in the "Open with" list and you can confirm it as
   the default from there (or via Settings → Default apps).
+- The `ShellNew` keys add both file types to Explorer's **New** context
+  menu as two distinct entries — "Mdex Archive Document" (`.mdex`) and
+  "Markdown Document" (`.md`), one ProgID per extension. The new `.mdex`
+  file is written from an embedded minimal template (`meta.json` +
+  `document.md`), so it opens as a valid archive; the new `.md` file is
+  empty. When another application owns the `.md` association, its label is
+  shown instead and mdex stays out of the way.
 - Explorer is notified via `SHChangeNotify(SHCNE_ASSOCCHANGED)` so icons and
   context menus refresh immediately.
 - The NSIS installer produced by `pnpm tauri build` registers the same
